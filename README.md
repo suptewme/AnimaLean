@@ -37,3 +37,18 @@ Just download and run, no installation needed.
 ---
 
 ## Build from source
+git clone https://github.com/ТВОЙ_НИК/JSONPack.git
+cd JSONPack
+pip install -r requirements.txt
+python main.py
+Build .exe: py -m PyInstaller --onefile --windowed --name="JSONPack" main.py
+
+---
+
+## License
+
+MIT License with Attribution.
+
+You can use, modify, and distribute this software. You must keep the original copyright notice and state that the original project is JSONPack. You may not claim it as your own.
+
+See LICENSE file for details.
