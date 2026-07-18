@@ -37,7 +37,7 @@ Beta version - report issues if you find them.
 ---
 
 ## Build from source
-git clone https://github.com/ТВОЙ_НИК/JSONPack.git
+git clone https://github.com/suptewme/JSONPack.git
 cd JSONPack
 pip install -r requirements.txt
 python main.py
