@@ -1,4 +1,4 @@
-# JSONPack Beta
+# AnimaLean
 
 Convert videos and GIFs to lightweight animated formats.
 
