@@ -74,6 +74,8 @@ class GiftGenerator:
                     pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64).convert('RGB')
                 elif self.quality == 'balanced':
                     pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128).convert('RGB')
+                else:
+                    pil_img = pil_img.convert('RGB')
 
                 frame_processed = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
                 frames_list.append(frame_processed)
@@ -125,6 +127,8 @@ class GiftGenerator:
                     pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64).convert('RGB')
                 elif self.quality == 'balanced':
                     pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128).convert('RGB')
+                else:
+                    pil_img = pil_img.convert('RGB')
 
                 buffered = BytesIO()
                 pil_img.save(buffered, format="PNG")
