@@ -8,7 +8,7 @@ from PIL import Image, ImageTk
 import cv2
 import numpy as np
 from core import GiftGenerator
-from utils import get_filename_without_ext, get_video_info
+from utils import get_filename_without_ext, get_video_info, generate_palette
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -780,32 +780,6 @@ class JSONPackApp(ctk.CTk):
         self.generator.set_format(m.get(choice, "tgs"))
         self.save_settings()
     
-    def generate_palette(self, frames):
-        palette = []
-        try:
-            for frame in frames:
-                if len(frame.shape) == 3:
-                    if frame.shape[2] == 3:
-                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    else:
-                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGBA)
-                    pil_img = Image.fromarray(frame_rgb)
-                    colors = pil_img.getcolors(maxcolors=256)
-                    if colors:
-                        sorted_colors = sorted(colors, key=lambda x: x[0], reverse=True)
-                        for count, color in sorted_colors[:10]:
-                            if len(color) == 3:
-                                hex_color = '#{:02x}{:02x}{:02x}'.format(color[0], color[1], color[2])
-                            else:
-                                hex_color = '#{:02x}{:02x}{:02x}'.format(color[0], color[1], color[2])
-                            if hex_color not in palette:
-                                palette.append(hex_color)
-                    if len(palette) >= 10:
-                        break
-        except:
-            pass
-        return palette[:10]
-    
     def generate(self):
         if not self.file_list:
             self.status_label.configure(text="Сначала добавьте файлы!")
@@ -855,11 +829,6 @@ class JSONPackApp(ctk.CTk):
                 self.generator.load_video(file_path)
                 if not self.generator.extract_frames():
                     continue
-                if format_type in ['css', 'spritesheet']:
-                    palette = self.generate_palette(self.generator.frames)
-                    palette_path = os.path.join(output_folder, f"{self.generator.filename}_colors.json")
-                    with open(palette_path, 'w', encoding='utf-8') as f:
-                        json.dump({"palette": palette}, f, indent=2)
                 self.generator.generate_json(format_type)
                 processed += 1
                 total_size += self.generator.get_result_size()
