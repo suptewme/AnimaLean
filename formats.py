@@ -319,9 +319,9 @@ def build_sprite_image(frames, cols, rows, width, height, output_path, quality='
             sprite_img.paste(new_img, (x, y))
         
         if quality == 'minimal':
-            sprite_img = sprite_img.quantize(colors=128, method=Image.MEDIANCUT).convert('RGBA')
+            sprite_img = sprite_img.quantize(colors=128, method=Image.MEDIANCUT, dither=Image.Dither.NONE)
         elif quality == 'balanced':
-            sprite_img = sprite_img.quantize(colors=192, method=Image.MEDIANCUT).convert('RGBA')
+            sprite_img = sprite_img.quantize(colors=192, method=Image.MEDIANCUT, dither=Image.Dither.NONE)
         
         sprite_img.save(output_path, optimize=True, compress_level=9)
         return True
