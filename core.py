@@ -7,8 +7,7 @@ from PIL import Image
 from io import BytesIO
 import imageio
 import numpy as np
-from collections import Counter
-from utils import get_video_info
+from utils import get_video_info, generate_palette
 from formats import (
     build_lottie_json, build_sprite_json,
     build_css_animation, build_android_xml,
@@ -223,6 +222,11 @@ class GiftGenerator:
             with open(json_path, 'w') as f:
                 json.dump(json_data, f, indent=2)
 
+            palette = generate_palette(self.frames)
+            palette_path = os.path.join(output_folder, f'{self.filename}_colors.json')
+            with open(palette_path, 'w', encoding='utf-8') as f:
+                json.dump({"palette": palette}, f, indent=2)
+
         elif format_type == 'css':
             self.build_sprite()
             css_data = build_css_animation(
@@ -234,6 +238,11 @@ class GiftGenerator:
             with open(json_path, 'w') as f:
                 f.write(css_data)
             json_data = {'css_file': json_path}
+
+            palette = generate_palette(self.frames)
+            palette_path = os.path.join(output_folder, f'{self.filename}_colors.json')
+            with open(palette_path, 'w', encoding='utf-8') as f:
+                json.dump({"palette": palette}, f, indent=2)
 
         elif format_type == 'android':
             self.build_sprite()
