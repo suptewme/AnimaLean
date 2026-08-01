@@ -15,6 +15,8 @@ LOTTIE_TEMPLATE = {
 }
 
 def build_lottie_json(frames_data, width, height, fps):
+    if fps <= 0:
+        fps = 20
     return {
         "v": "5.7.4",
         "w": width,
@@ -46,6 +48,8 @@ def build_lottie_json(frames_data, width, height, fps):
     }
 
 def build_sprite_json(frames, cols, rows, width, height, delay):
+    if delay <= 0:
+        delay = 50
     return {
         "type": "spritesheet",
         "image": "sprite.png",
@@ -80,6 +84,8 @@ def build_css_animation(frames, cols, rows, width, height, duration):
     return css
 
 def build_android_xml(frames, delay):
+    if delay <= 0:
+        delay = 50
     xml = '<?xml version="1.0" encoding="utf-8"?>\n<animation-list xmlns:android="http://schemas.android.com/apk/res/android">\n'
     for i in range(frames):
         xml += f'    <item android:drawable="@drawable/frame_{i}" android:duration="{delay}" />\n'
@@ -87,6 +93,8 @@ def build_android_xml(frames, delay):
     return xml
 
 def build_swift_code(frames, width, height, delay):
+    if delay <= 0:
+        delay = 50
     swift = f"""
 import UIKit
 
@@ -131,6 +139,8 @@ class GiftAnimation: UIView {{
     return swift
 
 def build_react_component(frames, cols, width, height, delay):
+    if delay <= 0:
+        delay = 50
     jsx = f"""
 import React, {{ useState, useEffect }} from 'react';
 import sprite from './sprite.png';
@@ -173,6 +183,8 @@ export default GiftAnimation;
     return jsx
 
 def build_json_base64(frames, width, height, fps):
+    if fps <= 0:
+        fps = 20
     return {
         "type": "json_base64",
         "width": width,
@@ -207,8 +219,7 @@ def build_gif(frames, output_path, duration):
             optimize=True
         )
         return True
-    except Exception as e:
-        print(f"GIF save error: {e}")
+    except:
         return False
 
 def build_apng(frames, output_path, duration):
@@ -229,12 +240,11 @@ def build_apng(frames, output_path, duration):
             append_images=pil_frames[1:],
             duration=duration,
             loop=0,
-            format="PNG",
+            format="APNG",
             optimize=True
         )
         return True
-    except Exception as e:
-        print(f"APNG save error: {e}")
+    except:
         return False
 
 def build_webp(frames, output_path, duration):
@@ -260,8 +270,7 @@ def build_webp(frames, output_path, duration):
             optimize=True
         )
         return True
-    except Exception as e:
-        print(f"WEBP save error: {e}")
+    except:
         return False
 
 def build_mp4_no_audio(frames, output_path, fps):
@@ -277,8 +286,7 @@ def build_mp4_no_audio(frames, output_path, fps):
             out.write(frame)
         out.release()
         return True
-    except Exception as e:
-        print(f"MP4 save error: {e}")
+    except:
         return False
 
 def build_sprite_image(frames, cols, rows, width, height, output_path, quality='minimal'):
@@ -299,12 +307,9 @@ def build_sprite_image(frames, cols, rows, width, height, output_path, quality='
                 else:
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGBA)
             else:
-                frame_rgb = frame
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
             
             pil_frame = Image.fromarray(frame_rgb)
-            if quality == 'minimal':
-                pil_frame = pil_frame.convert('P', palette=Image.ADAPTIVE, colors=64)
-                pil_frame = pil_frame.convert('RGBA')
             new_img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
             paste_x = (width - pil_frame.width) // 2
             paste_y = (height - pil_frame.height) // 2
@@ -314,10 +319,11 @@ def build_sprite_image(frames, cols, rows, width, height, output_path, quality='
             sprite_img.paste(new_img, (x, y))
         
         if quality == 'minimal':
-            sprite_img = sprite_img.convert('P', palette=Image.ADAPTIVE, colors=128)
-            sprite_img = sprite_img.convert('RGBA')
+            sprite_img = sprite_img.quantize(colors=128, method=Image.MEDIANCUT).convert('RGBA')
+        elif quality == 'balanced':
+            sprite_img = sprite_img.quantize(colors=192, method=Image.MEDIANCUT).convert('RGBA')
+        
         sprite_img.save(output_path, optimize=True, compress_level=9)
         return True
-    except Exception as e:
-        print(f"Sprite save error: {e}")
+    except:
         return False
