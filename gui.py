@@ -281,6 +281,9 @@ class JSONPackApp(ctk.CTk):
             self.load_progress_label.configure(text="Загрузка: 0%")
     
     def load_video(self, path):
+        if self.video_cap is not None:
+            self.video_cap.release()
+            self.video_cap = None
         self.current_video_path = path
         info = get_video_info(path)
         if info:
@@ -429,8 +432,6 @@ class JSONPackApp(ctk.CTk):
                 self._updater_id = None
         else:
             self.pause_btn.configure(text="⏸")
-            if self.video_cap:
-                self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_pos)
             self.play_video()
     
     def play_video(self):
@@ -781,15 +782,28 @@ class JSONPackApp(ctk.CTk):
     
     def generate_palette(self, frames):
         palette = []
-        for frame in frames:
-            if len(frame.shape) == 3:
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pixels = img.reshape(-1, 3)
-                unique = np.unique(pixels, axis=0)
-                for color in unique[:10]:
-                    hex_color = '#{:02x}{:02x}{:02x}'.format(int(color[0]), int(color[1]), int(color[2]))
-                    if hex_color not in palette:
-                        palette.append(hex_color)
+        try:
+            for frame in frames:
+                if len(frame.shape) == 3:
+                    if frame.shape[2] == 3:
+                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    else:
+                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGBA)
+                    pil_img = Image.fromarray(frame_rgb)
+                    colors = pil_img.getcolors(maxcolors=256)
+                    if colors:
+                        sorted_colors = sorted(colors, key=lambda x: x[0], reverse=True)
+                        for count, color in sorted_colors[:10]:
+                            if len(color) == 3:
+                                hex_color = '#{:02x}{:02x}{:02x}'.format(color[0], color[1], color[2])
+                            else:
+                                hex_color = '#{:02x}{:02x}{:02x}'.format(color[0], color[1], color[2])
+                            if hex_color not in palette:
+                                palette.append(hex_color)
+                    if len(palette) >= 10:
+                        break
+        except:
+            pass
         return palette[:10]
     
     def generate(self):
