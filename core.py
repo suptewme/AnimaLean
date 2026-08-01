@@ -9,9 +9,11 @@ import imageio
 import numpy as np
 from utils import get_video_info
 from formats import (
-    build_lottie_json, build_sprite_json, 
+    build_lottie_json, build_sprite_json,
     build_css_animation, build_android_xml,
-    build_swift_code, build_react_component
+    build_swift_code, build_react_component,
+    build_json_base64, build_gif, build_apng,
+    build_webp, build_mp4_no_audio, build_sprite_image
 )
 
 class GiftGenerator:
@@ -36,20 +38,20 @@ class GiftGenerator:
     def extract_frames(self):
         if not self.video_path:
             return False
-        
+
         info = get_video_info(self.video_path)
         if not info:
             return False
-        
+
         total_frames = info['frames']
         fps = info['fps']
-        
+
         cap = cv2.VideoCapture(self.video_path)
         frames_list = []
-        
+
         step = max(1, int(total_frames / self.max_frames))
         count = 0
-        
+
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -64,21 +66,26 @@ class GiftGenerator:
                 else:
                     new_h = target_size
                     new_w = int(target_size * aspect)
-                
+
                 frame = cv2.resize(frame, (new_w, new_h))
-                
+
                 if self.quality == 'minimal':
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     pil_img = Image.fromarray(frame)
                     pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64)
                     frame = cv2.cvtColor(np.array(pil_img.convert('RGB')), cv2.COLOR_RGB2BGR)
-                
+                elif self.quality == 'balanced':
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_img = Image.fromarray(frame)
+                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128)
+                    frame = cv2.cvtColor(np.array(pil_img.convert('RGB')), cv2.COLOR_RGB2BGR)
+
                 frames_list.append(frame)
-                
+
                 if len(frames_list) >= self.max_frames:
                     break
             count += 1
-        
+
         cap.release()
         self.frames = frames_list
         return len(self.frames) > 0
@@ -86,21 +93,21 @@ class GiftGenerator:
     def extract_frames_for_lottie(self):
         if not self.video_path:
             return False
-        
+
         info = get_video_info(self.video_path)
         if not info:
             return False
-        
+
         total_frames = info['frames']
         fps = info['fps']
-        
+
         cap = cv2.VideoCapture(self.video_path)
         frames_list = []
         encoded_frames = []
-        
+
         step = max(1, int(total_frames / self.max_frames))
         count = 0
-        
+
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -115,25 +122,28 @@ class GiftGenerator:
                 else:
                     new_h = target_size
                     new_w = int(target_size * aspect)
-                
+
                 frame = cv2.resize(frame, (new_w, new_h))
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil_img = Image.fromarray(frame_rgb)
-                
+
                 if self.quality == 'minimal':
                     pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64)
                     pil_img = pil_img.convert('RGB')
-                
+                elif self.quality == 'balanced':
+                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128)
+                    pil_img = pil_img.convert('RGB')
+
                 buffered = BytesIO()
                 pil_img.save(buffered, format="PNG")
                 img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
                 encoded_frames.append(img_str)
                 frames_list.append(frame)
-                
+
                 if len(frames_list) >= self.max_frames:
                     break
             count += 1
-        
+
         cap.release()
         self.frames = frames_list
         return encoded_frames
@@ -141,77 +151,46 @@ class GiftGenerator:
     def build_sprite(self):
         if not self.frames:
             return False
-        
+
         cols = int(len(self.frames) ** 0.5)
         if cols * cols < len(self.frames):
             cols += 1
         rows = (len(self.frames) + cols - 1) // cols
-        
-        sprite_width = cols * self.frame_size
-        sprite_height = rows * self.frame_size
-        
-        sprite_img = Image.new('RGBA', (sprite_width, sprite_height), (0, 0, 0, 0))
-        
-        for i, frame in enumerate(self.frames):
-            row = i // cols
-            col = i % cols
-            x = col * self.frame_size
-            y = row * self.frame_size
-            
-            h, w = frame.shape[:2]
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_frame = Image.fromarray(frame_rgb)
-            
-            if self.quality == 'minimal':
-                pil_frame = pil_frame.convert('P', palette=Image.ADAPTIVE, colors=64)
-                pil_frame = pil_frame.convert('RGB')
-            
-            new_img = Image.new('RGBA', (self.frame_size, self.frame_size), (0, 0, 0, 0))
-            paste_x = (self.frame_size - w) // 2
-            paste_y = (self.frame_size - h) // 2
-            if pil_frame.mode != 'RGBA':
-                pil_frame = pil_frame.convert('RGBA')
-            new_img.paste(pil_frame, (paste_x, paste_y))
-            sprite_img.paste(new_img, (x, y))
-        
+
         output_folder = self.output_folder or 'сжатые'
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-        
+
         sprite_path = os.path.join(output_folder, f'{self.filename}_sprite.png')
-        
-        if self.quality == 'minimal':
-            sprite_img = sprite_img.convert('P', palette=Image.ADAPTIVE, colors=128)
-            sprite_img = sprite_img.convert('RGBA')
-        
-        sprite_img.save(sprite_path, optimize=True, compress_level=9)
-        self.sprite_path = sprite_path
-        return True
+        result = build_sprite_image(self.frames, cols, rows, self.frame_size, self.frame_size, sprite_path, self.quality)
+        if result:
+            self.sprite_path = sprite_path
+        return result
 
     def generate_json(self, format_type='tgs'):
         if not self.frames:
             return None
-        
+
         cols = int(len(self.frames) ** 0.5)
         if cols * cols < len(self.frames):
             cols += 1
         rows = (len(self.frames) + cols - 1) // cols
-        
+
         output_folder = self.output_folder or 'сжатые'
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-        
+
         json_data = None
         json_path = None
-        
+
         if format_type == 'tgs':
             encoded = self.extract_frames_for_lottie()
             if not encoded:
                 return None
             lottie_data = build_lottie_json(
-                encoded, 
-                self.frame_size, 
-                self.frame_size, 
+                encoded,
+                self.frame_size,
+                self.frame_size,
                 1000 // self.delay
             )
             json_path = os.path.join(output_folder, f'{self.filename}.tgs')
@@ -219,7 +198,7 @@ class GiftGenerator:
                 json_str = json.dumps(lottie_data, separators=(',', ':'))
                 compressed = gzip.compress(json_str.encode('utf-8'), compresslevel=9)
                 f.write(compressed)
-        
+
         elif format_type == 'lottie':
             encoded = self.extract_frames_for_lottie()
             if not encoded:
@@ -233,18 +212,18 @@ class GiftGenerator:
             json_path = os.path.join(output_folder, f'{self.filename}.json')
             with open(json_path, 'w') as f:
                 json.dump(lottie_data, f, separators=(',', ':'))
-        
+
         elif format_type == 'spritesheet':
             self.build_sprite()
             json_data = build_sprite_json(
-                self.frames, cols, rows, 
-                self.frame_size, self.frame_size, 
+                self.frames, cols, rows,
+                self.frame_size, self.frame_size,
                 self.delay
             )
             json_path = os.path.join(output_folder, f'{self.filename}_data.json')
             with open(json_path, 'w') as f:
                 json.dump(json_data, f, indent=2)
-        
+
         elif format_type == 'css':
             self.build_sprite()
             css_data = build_css_animation(
@@ -256,7 +235,7 @@ class GiftGenerator:
             with open(json_path, 'w') as f:
                 f.write(css_data)
             json_data = {'css_file': json_path}
-        
+
         elif format_type == 'android':
             self.build_sprite()
             xml_data = build_android_xml(len(self.frames), self.delay)
@@ -264,7 +243,7 @@ class GiftGenerator:
             with open(json_path, 'w') as f:
                 f.write(xml_data)
             json_data = {'xml_file': json_path}
-        
+
         elif format_type == 'ios':
             self.build_sprite()
             swift_data = build_swift_code(len(self.frames), self.frame_size, self.frame_size, self.delay)
@@ -272,15 +251,69 @@ class GiftGenerator:
             with open(json_path, 'w') as f:
                 f.write(swift_data)
             json_data = {'swift_file': json_path}
-        
+
         elif format_type == 'react':
             self.build_sprite()
-            jsx_data = build_react_component(len(self.frames), self.frame_size, self.frame_size, self.delay)
+            jsx_data = build_react_component(len(self.frames), cols, self.frame_size, self.frame_size, self.delay)
             json_path = os.path.join(output_folder, f'{self.filename}.jsx')
             with open(json_path, 'w') as f:
                 f.write(jsx_data)
             json_data = {'jsx_file': json_path}
-        
+
+        elif format_type == 'json_base64':
+            encoded = self.extract_frames_for_lottie()
+            if not encoded:
+                return None
+            json_data = build_json_base64(encoded, self.frame_size, self.frame_size, 1000 // self.delay)
+            json_path = os.path.join(output_folder, f'{self.filename}_base64.json')
+            with open(json_path, 'w') as f:
+                json.dump(json_data, f, indent=2)
+
+        elif format_type == 'gif':
+            if not self.frames:
+                return None
+            output_path = os.path.join(output_folder, f'{self.filename}.gif')
+            result = build_gif(self.frames, output_path, self.delay)
+            if result:
+                json_path = output_path
+                json_data = {'gif_file': output_path}
+            else:
+                return None
+
+        elif format_type == 'apng':
+            if not self.frames:
+                return None
+            output_path = os.path.join(output_folder, f'{self.filename}.png')
+            result = build_apng(self.frames, output_path, self.delay)
+            if result:
+                json_path = output_path
+                json_data = {'apng_file': output_path}
+            else:
+                return None
+
+        elif format_type == 'webp':
+            if not self.frames:
+                return None
+            output_path = os.path.join(output_folder, f'{self.filename}.webp')
+            result = build_webp(self.frames, output_path, self.delay)
+            if result:
+                json_path = output_path
+                json_data = {'webp_file': output_path}
+            else:
+                return None
+
+        elif format_type == 'mp4':
+            if not self.frames:
+                return None
+            output_path = os.path.join(output_folder, f'{self.filename}.mp4')
+            fps = 1000 // self.delay if self.delay > 0 else 20
+            result = build_mp4_no_audio(self.frames, output_path, fps)
+            if result:
+                json_path = output_path
+                json_data = {'mp4_file': output_path}
+            else:
+                return None
+
         self.json_path = json_path
         return json_data
 
