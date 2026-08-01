@@ -18,7 +18,6 @@ SETTINGS_FILE = "settings.json"
 class JSONPackApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        
         self.title("AnimaLean — Конвертер анимаций")
         self.geometry("1000x1150")
         self.minsize(900, 1050)
@@ -45,6 +44,7 @@ class JSONPackApp(ctk.CTk):
         self.current_video_path = None
         self.playback_speed = 1.0
         self.speed_check_var = ctk.StringVar(value="off")
+        self._updater_id = None
         
         self.settings = self.load_settings()
         self.setup_ui()
@@ -173,7 +173,6 @@ class JSONPackApp(ctk.CTk):
         self.file_buttons = []
         self.update_files_display()
         
-        # Видео предпросмотр
         self.video_container = ctk.CTkFrame(main_frame, fg_color="transparent")
         self.video_container.grid(row=2, column=0, pady=(0, 10), sticky="ew")
         self.video_container.grid_columnconfigure(0, weight=1)
@@ -295,6 +294,7 @@ class JSONPackApp(ctk.CTk):
     def show_preview(self, path):
         try:
             if path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.tiff')):
+                self.clear_files()
                 img = Image.open(path)
                 w = self.preview_frame.winfo_width() - 20
                 h = self.preview_height - 20
@@ -309,24 +309,35 @@ class JSONPackApp(ctk.CTk):
                 self.speed_check.configure(state="disabled")
                 self.speed_slider.configure(state="disabled")
             else:
-                cap = cv2.VideoCapture(path)
-                ret, frame = cap.read()
-                cap.release()
-                if ret:
-                    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                    w = self.preview_frame.winfo_width() - 20
-                    h = self.preview_height - 20
-                    img.thumbnail((w, h), Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(img)
-                    self.preview_label.configure(image=photo, text="")
-                    self.preview_label.image = photo
-                    self.draw_timeline()
-                    self.play_btn.configure(state="normal", fg_color="#D0D0D0", text_color="#1A1A1A")
-                    self.pause_btn.configure(state="normal", fg_color="#D0D0D0", text_color="#1A1A1A")
-                    self.speed_check.configure(state="normal")
-                    self.speed_slider.configure(state="normal")
+                cap = None
+                try:
+                    cap = cv2.VideoCapture(path)
+                    if cap is None or not cap.isOpened():
+                        self.preview_label.configure(text="Не удалось открыть видео")
+                        return
+                    ret, frame = cap.read()
+                    if ret and frame is not None:
+                        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                        w = self.preview_frame.winfo_width() - 20
+                        h = self.preview_height - 20
+                        img.thumbnail((w, h), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(img)
+                        self.preview_label.configure(image=photo, text="")
+                        self.preview_label.image = photo
+                        self.draw_timeline()
+                        self.play_btn.configure(state="normal", fg_color="#D0D0D0", text_color="#1A1A1A")
+                        self.pause_btn.configure(state="normal", fg_color="#D0D0D0", text_color="#1A1A1A")
+                        self.speed_check.configure(state="normal")
+                        self.speed_slider.configure(state="normal")
+                    else:
+                        self.preview_label.configure(text="Не удалось прочитать кадр")
+                except:
+                    self.preview_label.configure(text="Ошибка загрузки")
+                finally:
+                    if cap is not None:
+                        cap.release()
         except:
-            self.preview_label.configure(text="Не удалось загрузить превью")
+            self.preview_label.configure(text="Не удалось загрузить")
     
     def format_time(self, seconds):
         m = int(seconds // 60)
@@ -359,7 +370,7 @@ class JSONPackApp(ctk.CTk):
         if self.video_cap:
             self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_pos)
             ret, frame = self.video_cap.read()
-            if ret:
+            if ret and frame is not None:
                 img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 w2 = self.preview_frame.winfo_width() - 20
                 h2 = self.preview_height - 20
@@ -375,9 +386,15 @@ class JSONPackApp(ctk.CTk):
     def toggle_play(self):
         if not self.current_video_path:
             return
+        if self.current_video_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.tiff')):
+            return
         if self.is_playing:
             self.is_playing = False
+            self.is_paused = False
             self.play_btn.configure(text="▶")
+            if self._updater_id is not None:
+                self.after_cancel(self._updater_id)
+                self._updater_id = None
             self.current_frame_pos = 0
             if self.video_cap:
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -386,6 +403,9 @@ class JSONPackApp(ctk.CTk):
         self.is_playing = True
         self.is_paused = False
         self.play_btn.configure(text="⏹")
+        if self._updater_id is not None:
+            self.after_cancel(self._updater_id)
+            self._updater_id = None
         self.play_video()
     
     def toggle_pause(self):
@@ -394,6 +414,9 @@ class JSONPackApp(ctk.CTk):
         self.is_paused = not self.is_paused
         if self.is_paused:
             self.pause_btn.configure(text="▶")
+            if self._updater_id is not None:
+                self.after_cancel(self._updater_id)
+                self._updater_id = None
         else:
             self.pause_btn.configure(text="⏸")
             self.play_video()
@@ -401,25 +424,39 @@ class JSONPackApp(ctk.CTk):
     def play_video(self):
         if not self.video_cap or not self.is_playing or self.is_paused:
             return
-        ret, frame = self.video_cap.read()
-        if not ret:
+        try:
+            ret, frame = self.video_cap.read()
+            if not ret or frame is None:
+                self.is_playing = False
+                self.is_paused = False
+                self.play_btn.configure(text="▶")
+                self.pause_btn.configure(text="⏸")
+                if self._updater_id is not None:
+                    self.after_cancel(self._updater_id)
+                    self._updater_id = None
+                self.current_frame_pos = 0
+                if self.video_cap:
+                    self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                self.show_preview(self.current_video_path)
+                return
+            self.current_frame_pos += 1
+            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            w = self.preview_frame.winfo_width() - 20
+            h = self.preview_height - 20
+            img.thumbnail((w, h), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            self.preview_label.configure(image=photo, text="")
+            self.preview_label.image = photo
+            self.draw_timeline()
+            delay_ms = int(1000 / (self.fps * self.playback_speed)) if self.fps > 0 else 50
+            self._updater_id = self.after(delay_ms, self.play_video)
+        except:
             self.is_playing = False
             self.play_btn.configure(text="▶")
-            self.current_frame_pos = 0
-            if self.video_cap:
-                self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.show_preview(self.current_video_path)
-            return
-        self.current_frame_pos += 1
-        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        w = self.preview_frame.winfo_width() - 20
-        h = self.preview_height - 20
-        img.thumbnail((w, h), Image.Resampling.LANCZOS)
-        photo = ImageTk.PhotoImage(img)
-        self.preview_label.configure(image=photo, text="")
-        self.preview_label.image = photo
-        self.draw_timeline()
-        self.after(int(1000 / (self.fps * self.playback_speed)), self.play_video)
+            self.pause_btn.configure(text="⏸")
+            if self._updater_id is not None:
+                self.after_cancel(self._updater_id)
+                self._updater_id = None
     
     def toggle_speed(self):
         if self.speed_check_var.get() == "on":
@@ -440,13 +477,16 @@ class JSONPackApp(ctk.CTk):
             self.show_preview(self.current_video_path)
     
     def clear_files(self):
-        self.file_list = []
-        self.current_video_path = None
+        self.is_playing = False
+        self.is_paused = False
+        if self._updater_id is not None:
+            self.after_cancel(self._updater_id)
+            self._updater_id = None
         if self.video_cap:
             self.video_cap.release()
             self.video_cap = None
-        self.is_playing = False
-        self.is_paused = False
+        self.file_list = []
+        self.current_video_path = None
         self.current_frame_pos = 0
         self.total_frames = 0
         self.fps = 0
@@ -467,37 +507,29 @@ class JSONPackApp(ctk.CTk):
     def update_files_display(self):
         for widget in self.files_scrollable.winfo_children():
             widget.destroy()
-        
         self.file_buttons = []
         self.file_list_label.configure(text=f"Загружено файлов: {len(self.file_list)}")
-        
         cols = 6
         for i, path in enumerate(self.file_list):
             frame = ctk.CTkFrame(self.files_scrollable, fg_color="#333333", corner_radius=6, width=50, height=50)
             frame.grid(row=i // cols, column=i % cols, padx=3, pady=3, sticky="nsew")
             frame.grid_propagate(False)
-            
             label = ctk.CTkLabel(frame, text=str(i+1), font=ctk.CTkFont(size=16, weight="bold"), text_color="#FFFFFF")
             label.grid(row=0, column=0, sticky="nsew")
-            
             tooltip = ctk.CTkToplevel(self)
             tooltip.overrideredirect(True)
             tooltip.attributes("-topmost", True)
             tooltip.withdraw()
             tooltip_label = ctk.CTkLabel(tooltip, text=os.path.basename(path), fg_color="#2A2A2A", corner_radius=6, padx=10, pady=5)
             tooltip_label.pack()
-            
             def on_enter(event, p=path, t=tooltip):
                 t.geometry(f"+{event.x_root+10}+{event.y_root+10}")
                 t.deiconify()
-            
             def on_leave(event, t=tooltip):
                 t.withdraw()
-            
             frame.bind("<Enter>", on_enter)
             frame.bind("<Leave>", on_leave)
             frame.bind("<Button-1>", lambda e, idx=i: self.on_file_click(idx))
-            
             self.file_buttons.append(frame)
     
     def on_file_click(self, idx):
@@ -506,13 +538,11 @@ class JSONPackApp(ctk.CTk):
     
     def build_settings(self):
         ctk.CTkLabel(self.settings_frame, text="─── Настройки ───", font=ctk.CTkFont(size=14, weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
-        
         sync_row = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         sync_row.grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 5))
         self.sync_var = ctk.StringVar(value="off")
         self.sync_check = ctk.CTkCheckBox(sync_row, text="Одинаковые параметры для всех", variable=self.sync_var, onvalue="on", offvalue="off", command=self.toggle_sync, fg_color="#D0D0D0", text_color="#FFFFFF")
         self.sync_check.grid(row=0, column=0, padx=(0, 10))
-        
         ctk.CTkLabel(self.settings_frame, text="Папка сохранения:").grid(row=2, column=0, sticky="w", pady=5)
         ff = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         ff.grid(row=2, column=1, sticky="ew")
@@ -521,12 +551,10 @@ class JSONPackApp(ctk.CTk):
         self.folder_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         self.folder_btn = ctk.CTkButton(ff, text="Обзор", command=self.select_folder, fg_color="#D0D0D0", text_color="#1A1A1A", width=80)
         self.folder_btn.grid(row=0, column=1)
-        
         ctk.CTkLabel(self.settings_frame, text="Название:").grid(row=3, column=0, sticky="w", pady=5)
         self.name_entry = ctk.CTkEntry(self.settings_frame, border_color="#FFFFFF", border_width=1, fg_color="#2A2A2A", text_color="#FFFFFF")
         self.name_entry.grid(row=3, column=1, sticky="ew", pady=5)
         self.name_entry.insert(0, "анимация")
-        
         ctk.CTkLabel(self.settings_frame, text="Формат вывода:").grid(row=4, column=0, sticky="w", pady=5)
         self.format_menu = ctk.CTkOptionMenu(
             self.settings_frame, 
@@ -551,17 +579,14 @@ class JSONPackApp(ctk.CTk):
         )
         self.format_menu.grid(row=4, column=1, sticky="ew", pady=5)
         self.format_menu.set("Telegram Style (TGS, Flutter)")
-        
         adv_row = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         adv_row.grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 5))
         self.advanced_var = ctk.StringVar(value="off")
         self.advanced_check = ctk.CTkCheckBox(adv_row, text="Расширенные настройки", variable=self.advanced_var, onvalue="on", offvalue="off", command=self.toggle_advanced, fg_color="#D0D0D0", text_color="#FFFFFF")
         self.advanced_check.grid(row=0, column=0, padx=(0, 10))
-        
         self.basic_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         self.basic_frame.grid(row=6, column=0, columnspan=2, sticky="ew")
         self.basic_frame.grid_columnconfigure(1, weight=1)
-        
         ctk.CTkLabel(self.basic_frame, text="Размер кадра:").grid(row=0, column=0, sticky="w", pady=5)
         sf = ctk.CTkFrame(self.basic_frame, fg_color="transparent")
         sf.grid(row=0, column=1, sticky="ew", pady=5)
@@ -571,7 +596,6 @@ class JSONPackApp(ctk.CTk):
         self.size_slider.set(128)
         self.size_label = ctk.CTkLabel(sf, text="128px", width=50)
         self.size_label.grid(row=0, column=1)
-        
         ctk.CTkLabel(self.basic_frame, text="Кол-во кадров:").grid(row=1, column=0, sticky="w", pady=5)
         ff2 = ctk.CTkFrame(self.basic_frame, fg_color="transparent")
         ff2.grid(row=1, column=1, sticky="ew", pady=5)
@@ -581,7 +605,6 @@ class JSONPackApp(ctk.CTk):
         self.frames_slider.set(20)
         self.frames_label = ctk.CTkLabel(ff2, text="20", width=30)
         self.frames_label.grid(row=0, column=1)
-        
         ctk.CTkLabel(self.basic_frame, text="Задержка:").grid(row=2, column=0, sticky="w", pady=5)
         df = ctk.CTkFrame(self.basic_frame, fg_color="transparent")
         df.grid(row=2, column=1, sticky="ew", pady=5)
@@ -591,7 +614,6 @@ class JSONPackApp(ctk.CTk):
         self.delay_slider.set(50)
         self.delay_label = ctk.CTkLabel(df, text="50мс", width=50)
         self.delay_label.grid(row=0, column=1)
-        
         ctk.CTkLabel(self.basic_frame, text="Шаг сетки (SpriteSheet):").grid(row=3, column=0, sticky="w", pady=5)
         gf = ctk.CTkFrame(self.basic_frame, fg_color="transparent")
         gf.grid(row=3, column=1, sticky="ew", pady=5)
@@ -601,12 +623,10 @@ class JSONPackApp(ctk.CTk):
         self.grid_slider.set(64)
         self.grid_label = ctk.CTkLabel(gf, text="64px", width=50)
         self.grid_label.grid(row=0, column=1)
-        
         self.advanced_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         self.advanced_frame.grid(row=7, column=0, columnspan=2, sticky="ew")
         self.advanced_frame.grid_columnconfigure(1, weight=1)
         self.advanced_frame.grid_remove()
-        
         ctk.CTkLabel(self.advanced_frame, text="Target FPS:").grid(row=0, column=0, sticky="w", pady=5)
         fpsf = ctk.CTkFrame(self.advanced_frame, fg_color="transparent")
         fpsf.grid(row=0, column=1, sticky="ew", pady=5)
@@ -616,7 +636,6 @@ class JSONPackApp(ctk.CTk):
         self.fps_slider.set(30)
         self.fps_label = ctk.CTkLabel(fpsf, text="30 FPS", width=60)
         self.fps_label.grid(row=0, column=1)
-        
         ctk.CTkLabel(self.advanced_frame, text="Разрешение:").grid(row=1, column=0, sticky="w", pady=5)
         resf = ctk.CTkFrame(self.advanced_frame, fg_color="transparent")
         resf.grid(row=1, column=1, sticky="ew", pady=5)
@@ -626,7 +645,6 @@ class JSONPackApp(ctk.CTk):
         self.res_slider.set(512)
         self.res_label = ctk.CTkLabel(resf, text="512px", width=60)
         self.res_label.grid(row=0, column=1)
-        
         ctk.CTkLabel(self.settings_frame, text="Качество:").grid(row=8, column=0, sticky="w", pady=5)
         qf = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
         qf.grid(row=8, column=1, sticky="w", pady=5)
@@ -652,30 +670,24 @@ class JSONPackApp(ctk.CTk):
     
     def build_result(self):
         ctk.CTkLabel(self.result_frame, text="─── Результат ───", font=ctk.CTkFont(size=14, weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
-        
         ctk.CTkLabel(self.result_frame, text="Итоговый размер:").grid(row=1, column=0, sticky="w", pady=5)
         self.size_result_label = ctk.CTkLabel(self.result_frame, text="~0 KB", fg_color="#2A2A2A", corner_radius=6, height=30)
         self.size_result_label.grid(row=1, column=1, sticky="ew", pady=5)
-        
         self.result_preview_frame = ctk.CTkFrame(self.result_frame, fg_color="#111111", corner_radius=8, height=180)
         self.result_preview_frame.grid(row=2, column=0, columnspan=2, pady=(0, 10), sticky="ew")
         self.result_preview_frame.grid_columnconfigure(0, weight=1)
         self.result_preview_frame.grid_rowconfigure(0, weight=1)
         self.result_preview_label = ctk.CTkLabel(self.result_preview_frame, text="Готовый спрайт появится здесь", fg_color="#111111", corner_radius=8)
         self.result_preview_label.grid(row=0, column=0, sticky="nsew")
-        
         rbf = ctk.CTkFrame(self.result_frame, fg_color="transparent")
         rbf.grid(row=3, column=0, columnspan=2, pady=(0, 10), sticky="ew")
         rbf.grid_columnconfigure(0, weight=1)
         rbf.grid_columnconfigure(1, weight=1)
-        
         self.result_delete_btn = ctk.CTkButton(rbf, text="Удалить", command=self.delete_result, fg_color="#D0D0D0", text_color="#FF6B6B", width=120)
         self.result_delete_btn.grid(row=0, column=0, padx=(0, 10))
-        
-        self.copy_btn = ctk.CTkButton(rbf, text="📋 Копировать JSON", command=self.copy_json, fg_color="#D0D0D0", text_color="#1A1A1A", width=120)
+        self.copy_btn = ctk.CTkButton(rbf, text="Копировать JSON", command=self.copy_json, fg_color="#D0D0D0", text_color="#1A1A1A", width=120)
         self.copy_btn.grid(row=0, column=1, padx=(0, 10))
-        
-        self.open_folder_btn = ctk.CTkButton(rbf, text="📂 Открыть папку", command=self.open_output_folder, fg_color="#D0D0D0", text_color="#1A1A1A", width=120)
+        self.open_folder_btn = ctk.CTkButton(rbf, text="Открыть папку", command=self.open_output_folder, fg_color="#D0D0D0", text_color="#1A1A1A", width=120)
         self.open_folder_btn.grid(row=0, column=2)
     
     def copy_json(self):
@@ -684,11 +696,11 @@ class JSONPackApp(ctk.CTk):
                 with open(self.generator.json_path, 'r', encoding='utf-8') as f:
                     data = f.read()
                 self.clipboard_append(data)
-                self.status_label.configure(text="✅ JSON скопирован в буфер обмена")
+                self.status_label.configure(text="JSON скопирован")
             else:
-                self.status_label.configure(text="❌ Нет JSON файла для копирования")
-        except Exception as e:
-            self.status_label.configure(text=f"❌ Ошибка: {e}")
+                self.status_label.configure(text="Нет JSON файла")
+        except:
+            self.status_label.configure(text="Ошибка копирования")
     
     def on_fps_change(self, value):
         self.target_fps = int(value)
@@ -725,23 +737,7 @@ class JSONPackApp(ctk.CTk):
         self.save_settings()
     
     def on_quality_change(self):
-        q = self.quality_var.get()
-        self.generator.set_quality(q)
-        if q == "minimal":
-            self.size_slider.set(64)
-            self.size_label.configure(text="64px")
-            self.frames_slider.set(20)
-            self.frames_label.configure(text="20")
-        elif q == "balanced":
-            self.size_slider.set(128)
-            self.size_label.configure(text="128px")
-            self.frames_slider.set(30)
-            self.frames_label.configure(text="30")
-        elif q == "high":
-            self.size_slider.set(256)
-            self.size_label.configure(text="256px")
-            self.frames_slider.set(40)
-            self.frames_label.configure(text="40")
+        self.generator.set_quality(self.quality_var.get())
         self.save_settings()
     
     def select_folder(self):
@@ -787,17 +783,14 @@ class JSONPackApp(ctk.CTk):
         if not self.file_list:
             self.status_label.configure(text="Сначала добавьте файлы!")
             return
-        
         if self.is_processing:
             return
-        
         self.is_processing = True
         self.generate_btn.configure(state="disabled", text="Обработка...")
         self.progress_bar.set(0)
         self.progress_label.configure(text="0%")
         self.start_time = time.time()
         self.status_label.configure(text="Начало конвертации...")
-        
         threading.Thread(target=self.process_generation).start()
     
     def process_generation(self):
@@ -805,7 +798,6 @@ class JSONPackApp(ctk.CTk):
             output_folder = self.folder_entry.get()
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
-            
             fmt = self.format_menu.get()
             m = {
                 "Telegram Style (TGS, Flutter)": "tgs",
@@ -822,14 +814,11 @@ class JSONPackApp(ctk.CTk):
                 "MP4 (без звука)": "mp4"
             }
             format_type = m.get(fmt, "tgs")
-            
             total = len(self.file_list)
             processed = 0
             total_size = 0
-            
             for i, file_path in enumerate(self.file_list):
                 self.after(0, self.update_progress, i, total, f"Обработка {i+1}/{total}: {os.path.basename(file_path)}")
-                
                 self.generator = GiftGenerator()
                 self.generator.set_output_folder(output_folder)
                 self.generator.set_frame_size(int(self.size_slider.get()))
@@ -837,26 +826,20 @@ class JSONPackApp(ctk.CTk):
                 self.generator.set_delay(int(self.delay_slider.get()))
                 self.generator.set_quality(self.quality_var.get())
                 self.generator.load_video(file_path)
-                
                 if not self.generator.extract_frames():
                     continue
-                
                 if format_type in ['css', 'spritesheet']:
                     palette = self.generate_palette(self.generator.frames)
                     palette_path = os.path.join(output_folder, f"{self.generator.filename}_colors.json")
                     with open(palette_path, 'w', encoding='utf-8') as f:
                         json.dump({"palette": palette}, f, indent=2)
-                
                 self.generator.generate_json(format_type)
                 processed += 1
                 total_size += self.generator.get_result_size()
-                
                 progress = (i + 1) / total
                 self.after(0, self.update_progress_bar, progress)
-            
             elapsed = time.time() - self.start_time
             self.after(0, self.generation_finished, processed, total, elapsed, total_size)
-            
         except Exception as e:
             self.after(0, self.generation_error, str(e))
     
@@ -870,28 +853,25 @@ class JSONPackApp(ctk.CTk):
     def generation_finished(self, processed, total, elapsed, total_size):
         self.is_processing = False
         self.generate_btn.configure(state="normal", text="Конвертировать")
-        
         minutes = int(elapsed // 60)
         seconds = int(elapsed % 60)
         time_str = f"{minutes}м {seconds}с" if minutes > 0 else f"{seconds}с"
         self.time_label.configure(text=f"Время конвертации: {time_str}")
-        
         size_kb = total_size / 1024
         if size_kb < 1024:
             size_str = f"~{size_kb:.1f} KB"
         else:
             size_str = f"~{size_kb/1024:.1f} MB"
         self.size_result_label.configure(text=size_str)
-        
         if processed == total:
-            self.status_label.configure(text=f"✅ Готово! Обработано {processed} файлов")
+            self.status_label.configure(text=f"Готово! Обработано {processed} файлов")
         else:
-            self.status_label.configure(text=f"⚠️ Обработано {processed} из {total} файлов")
+            self.status_label.configure(text=f"Обработано {processed} из {total} файлов")
     
     def generation_error(self, msg):
         self.is_processing = False
         self.generate_btn.configure(state="normal", text="Конвертировать")
-        self.status_label.configure(text=f"❌ Ошибка: {msg}")
+        self.status_label.configure(text=f"Ошибка: {msg}")
     
     def delete_result(self):
         self.result_preview_label.configure(image="", text="Готовый спрайт появится здесь")
