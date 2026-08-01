@@ -7,7 +7,7 @@ try:
     import PIL
     import imageio
 except ImportError as e:
-    print(f"❌ Ошибка: отсутствует библиотека {e}")
+    print(f"Ошибка: отсутствует библиотека {e}")
     print("Установите зависимости: pip install -r requirements.txt")
     input("Нажмите Enter для выхода...")
     sys.exit(1)
