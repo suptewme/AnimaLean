@@ -3,4 +3,3 @@ opencv-python==4.10.0.84
 Pillow==10.4.0
 imageio==2.34.2
 imageio[ffmpeg]
-gzip
