@@ -331,8 +331,14 @@ class JSONPackApp(ctk.CTk):
                         self.speed_slider.configure(state="normal")
                     else:
                         self.preview_label.configure(text="Не удалось прочитать кадр")
+                        if cap is not None:
+                            cap.release()
+                        return
                 except:
                     self.preview_label.configure(text="Ошибка загрузки")
+                    if cap is not None:
+                        cap.release()
+                    return
                 finally:
                     if cap is not None:
                         cap.release()
@@ -392,6 +398,7 @@ class JSONPackApp(ctk.CTk):
             self.is_playing = False
             self.is_paused = False
             self.play_btn.configure(text="▶")
+            self.pause_btn.configure(text="⏸")
             if self._updater_id is not None:
                 self.after_cancel(self._updater_id)
                 self._updater_id = None
@@ -403,6 +410,7 @@ class JSONPackApp(ctk.CTk):
         self.is_playing = True
         self.is_paused = False
         self.play_btn.configure(text="⏹")
+        self.pause_btn.configure(text="⏸")
         if self._updater_id is not None:
             self.after_cancel(self._updater_id)
             self._updater_id = None
@@ -410,6 +418,8 @@ class JSONPackApp(ctk.CTk):
     
     def toggle_pause(self):
         if not self.is_playing:
+            return
+        if self.current_video_path and self.current_video_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.tiff')):
             return
         self.is_paused = not self.is_paused
         if self.is_paused:
@@ -419,6 +429,8 @@ class JSONPackApp(ctk.CTk):
                 self._updater_id = None
         else:
             self.pause_btn.configure(text="⏸")
+            if self.video_cap:
+                self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_pos)
             self.play_video()
     
     def play_video(self):
@@ -452,6 +464,7 @@ class JSONPackApp(ctk.CTk):
             self._updater_id = self.after(delay_ms, self.play_video)
         except:
             self.is_playing = False
+            self.is_paused = False
             self.play_btn.configure(text="▶")
             self.pause_btn.configure(text="⏸")
             if self._updater_id is not None:
