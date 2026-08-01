@@ -36,16 +36,6 @@ Beta version - report issues if you find them.
 
 ---
 
-## Build from source
-git clone https://github.com/suptewme/AnimaLean.git
-cd JSONPack
-pip install -r requirements.txt
-python main.py
-
-text
-
----
-
 ## License
 
 MIT License with Attribution.
