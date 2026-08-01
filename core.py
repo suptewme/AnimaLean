@@ -7,6 +7,7 @@ from PIL import Image
 from io import BytesIO
 import imageio
 import numpy as np
+from collections import Counter
 from utils import get_video_info
 from formats import (
     build_lottie_json, build_sprite_json,
@@ -44,8 +45,6 @@ class GiftGenerator:
             return False
 
         total_frames = info['frames']
-        fps = info['fps']
-
         cap = cv2.VideoCapture(self.video_path)
         frames_list = []
 
@@ -68,19 +67,16 @@ class GiftGenerator:
                     new_w = int(target_size * aspect)
 
                 frame = cv2.resize(frame, (new_w, new_h))
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(frame_rgb)
 
                 if self.quality == 'minimal':
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    pil_img = Image.fromarray(frame)
-                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64)
-                    frame = cv2.cvtColor(np.array(pil_img.convert('RGB')), cv2.COLOR_RGB2BGR)
+                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64).convert('RGB')
                 elif self.quality == 'balanced':
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    pil_img = Image.fromarray(frame)
-                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128)
-                    frame = cv2.cvtColor(np.array(pil_img.convert('RGB')), cv2.COLOR_RGB2BGR)
+                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128).convert('RGB')
 
-                frames_list.append(frame)
+                frame_processed = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                frames_list.append(frame_processed)
 
                 if len(frames_list) >= self.max_frames:
                     break
@@ -99,8 +95,6 @@ class GiftGenerator:
             return False
 
         total_frames = info['frames']
-        fps = info['fps']
-
         cap = cv2.VideoCapture(self.video_path)
         frames_list = []
         encoded_frames = []
@@ -128,11 +122,9 @@ class GiftGenerator:
                 pil_img = Image.fromarray(frame_rgb)
 
                 if self.quality == 'minimal':
-                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64)
-                    pil_img = pil_img.convert('RGB')
+                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=64).convert('RGB')
                 elif self.quality == 'balanced':
-                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128)
-                    pil_img = pil_img.convert('RGB')
+                    pil_img = pil_img.convert('P', palette=Image.ADAPTIVE, colors=128).convert('RGB')
 
                 buffered = BytesIO()
                 pil_img.save(buffered, format="PNG")
@@ -170,6 +162,9 @@ class GiftGenerator:
     def generate_json(self, format_type='tgs'):
         if not self.frames:
             return None
+
+        if self.delay <= 0:
+            self.delay = 50
 
         cols = int(len(self.frames) ** 0.5)
         if cols * cols < len(self.frames):
