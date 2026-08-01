@@ -28,7 +28,7 @@ Beta version - report issues if you find them.
 
 ## How to use
 
-1. Open JSONPack.exe
+1. Open AnimaLean.exe
 2. Select a video or GIF
 3. Choose output format and settings
 4. Click "Сжать и создать JSON"
